@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 
 import authRouter from "./routes/auth.route.js";
+import chatRouter from "./routes/chat.route.js";
 import conn from "./config/db.js";
 import { sessionMiddleware } from "./middlewares/session.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
@@ -19,16 +20,17 @@ app.use(sessionMiddleware());
 
 // Routes
 app.use("/api/auth", authRouter);
-// app.use('/api/chat', )
+app.use("/api/chat", chatRouter);
 
 // Middleware for error handler
 app.use(errorHandler);
 
 // Connect DB
-const isConnectDB = await conn(); 
+const isConnectDB = await conn();
 
 // Start server
-isConnectDB && app.listen(PORT, (error) => {
-  error && console.log(error.message);
-  console.log(`Server is listening in PORT: ${PORT}`);
-});
+isConnectDB &&
+  app.listen(PORT, (error) => {
+    error && console.log(error.message);
+    console.log(`Server is listening in PORT: ${PORT}`);
+  });

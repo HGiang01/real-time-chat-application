@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { Conversation } from "../models/conversations.model.js";
 import { Message } from "../models/message.model.js";
 import { Group } from "../models/group.model.js";
+import { io, getSocketId } from "../config/socket.js";
 
 export const getConversations = async (
   req: Request,
@@ -10,7 +11,7 @@ export const getConversations = async (
 ): Promise<Response> => {
   const userId = req.session.user._id;
 
-  const conversations = await Conversation.findById(userId);
+  const conversations = await Conversation.find({ userId });
 
   return res.status(200).json({
     status: "Success",
@@ -25,32 +26,67 @@ export const getMessages = async (
 ): Promise<Response> => {
   const userId = req.session.user._id;
   const conversationId = req.params.id;
-  let typeOfConversation;
+  let type;
   let messages;
 
   const isGroupId = await Group.findById(conversationId);
   if (isGroupId) {
-    typeOfConversation = "group";
-    messages = await Message.find({
-      $or: [
-        { senderId: userId, groupId: conversationId },
-        { receiverId: userId, groupId: conversationId },
-      ],
-    }).sort({ createAt: -1 }); // Sort messages by create date ( newest to oldest )
+    type = "group";
+    messages = await Message.find({ groupId: conversationId }).sort({
+      createdAt: -1,
+    }); // Sort messages by create date ( newest to oldest )
   } else {
-    typeOfConversation = "single user";
+    type = "user";
     messages = await Message.find({
       $or: [
         { senderId: userId, receiverId: conversationId },
         { senderId: conversationId, receiverId: userId },
       ],
-    }).sort({ createAt: -1 }); // Sort messages by create date ( newest to oldest )
+    }).sort({ createdAt: -1 }); // Sort messages by create date ( newest to oldest )
   }
 
   return res.status(200).json({
     status: "Success",
     message: "Get user's messages successfully",
     messages,
-    typeOfConversation,
+    type,
+  });
+};
+
+export const sendMessage = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const content = req.body.content;
+  const type = req.body.type;
+  const senderId = req.session.user._id;
+  const conversationId = req.params.id;
+  const socketId = getSocketId(senderId);
+  let statusMessage;
+
+  // store message in database
+  const messageData: any = { content, senderId };
+  type === "user"
+    ? (messageData.receiverId = conversationId)
+    : (messageData.groupId = conversationId);
+  const message = new Message(messageData);
+  await message.save();
+
+  io.to(socketId!).emit(
+    "chat",
+    {
+      content,
+      receiverId: conversationId,
+      type,
+    },
+    (status: string) => {
+      statusMessage = status;
+    }
+  );
+
+  return res.status(201).json({
+    status: "Success",
+    message: "Message sent successfully",
+    statusMessage,
   });
 };
